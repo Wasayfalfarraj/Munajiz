@@ -921,6 +921,13 @@ html, body { overflow-x: hidden; }
   .sidebar-footer { display: none; }
   .main { margin-right: 0; padding: 14px; }
   .page-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* بطاقات وجداول تتكيف بدون أي سكرول أفقي للصفحة كاملة */
+  .facts-grid { grid-template-columns: 1fr; }
+  .case-actions { flex-wrap: wrap; }
+  .filters-row { flex-wrap: wrap; }
+  .bulk-table { display: block; overflow-x: auto; white-space: nowrap; }
+  .before-actions { flex-wrap: wrap; }
 }
 
 </style>
