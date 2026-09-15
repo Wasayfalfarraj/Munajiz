@@ -984,6 +984,25 @@ html, body { overflow-x: hidden; }
 .resolution-badge.auto   { background: #dcfce7; color: #15803d; }
 .resolution-badge.manual { background: #fee2e2; color: #991b1b; }
 
+/* ── أقرب فرع أحوال — بطاقة جديدة بنفس لغة التصميم الحالية ── */
+.route-visual {
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 0 6px;
+}
+.route-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--border);
+}
+.route-dot.me { background: var(--green-mid); }
+.route-dot.branch { background: var(--gold); }
+.route-line {
+  flex: 1; height: 0; border-top: 2px dashed var(--border);
+}
+.route-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-3); margin-bottom: 4px;
+}
+
 </style>
 </head>
 <body>
@@ -1105,6 +1124,7 @@ html, body { overflow-x: hidden; }
 
 <!-- التوقع والاستمرارية — منقولة هنا من التبويب الرابع سابقًا -->
 <div class="two-col" style="margin-top:20px">
+<div>
 <div class="card">
 <div class="card-header">توقع الحمل — فرع الرياض شمال</div>
 <div class="chart-wrap">
@@ -1113,6 +1133,28 @@ html, body { overflow-x: hidden; }
 <div class="capacity-note">
 <div class="cap-line cap-normal">الطاقة الطبيعية: 18,000</div>
 <div class="cap-line cap-extended">الطاقة الموسّعة: 22,000</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:20px" id="branchLocatorCard">
+<div class="card-header">أقرب فرع أحوال لعنوانك الوطني</div>
+<p style="font-size:12px;color:var(--text-2);margin-bottom:12px">أدخل عنوانك الوطني لمعرفة أقرب فرع أحوال إليك</p>
+<input class="guide-search" type="text" id="nationalAddressInput" placeholder="مثال: الرياض 1234 - 5678" style="margin-bottom:10px">
+<button class="sim-btn" onclick="findNearestBranch()">البحث عن أقرب فرع</button>
+
+<div id="branchResult" class="hidden" style="margin-top:14px">
+  <div class="route-labels"><span>أنت</span><span id="branchResultName">—</span></div>
+  <div class="route-visual">
+    <div class="route-dot me"></div>
+    <div class="route-line"></div>
+    <div class="route-dot branch"></div>
+  </div>
+  <div class="sim-result success" style="display:block">
+    <div><strong id="branchResultDistance">—</strong> · وقت الوصول التقريبي: <strong id="branchResultTime">—</strong></div>
+  </div>
+  <button class="link-btn" style="margin-top:10px" onclick="viewBranchLocation()">عرض الموقع</button>
+  <p style="font-size:10.5px;color:var(--text-3);margin-top:8px">بيانات تجريبية للعرض — ليست متصلة بنظام حكومي حقيقي</p>
+</div>
 </div>
 </div>
 
@@ -1462,6 +1504,48 @@ function activatePlaybook() {
     status.style.background = '#dcfce7';
     status.style.color = '#15803d';
   }, 1200);
+}
+
+// ── أقرب فرع أحوال لعنوانك الوطني (محاكاة — بيانات تجريبية بالكامل) ──────────
+const DEMO_BRANCHES = [
+  { name: 'فرع الأحوال المدنية — العليا', lat: 24.6941, lng: 46.6851 },
+  { name: 'فرع الأحوال المدنية — الملز', lat: 24.6600, lng: 46.7400 },
+  { name: 'فرع الأحوال المدنية — الشفا', lat: 24.6100, lng: 46.7100 },
+  { name: 'فرع الأحوال المدنية — النسيم', lat: 24.7300, lng: 46.8100 },
+  { name: 'فرع الأحوال المدنية — عرقة', lat: 24.8100, lng: 46.6200 },
+];
+
+function findNearestBranch() {
+  const input = document.getElementById('nationalAddressInput');
+  const address = input.value.trim();
+  if (!address) {
+    input.focus();
+    return;
+  }
+
+  // محاكاة بسيطة: نشتق من نص العنوان رقمًا ثابتًا لاختيار "أقرب" فرع ومسافة معقولة —
+  // بدون أي اتصال حقيقي بخدمة عنوان وطني أو خرائط
+  let hash = 0;
+  for (let i = 0; i < address.length; i++) hash = (hash * 31 + address.charCodeAt(i)) >>> 0;
+
+  const branch = DEMO_BRANCHES[hash % DEMO_BRANCHES.length];
+  const distanceKm = (1.5 + (hash % 90) / 10).toFixed(1);
+  const minutes = Math.max(5, Math.round(distanceKm * 3));
+
+  document.getElementById('branchResultName').textContent = branch.name;
+  document.getElementById('branchResultDistance').textContent = `${distanceKm} كم`;
+  document.getElementById('branchResultTime').textContent = `${minutes} دقيقة`;
+  document.getElementById('branchResult').dataset.branch = branch.name;
+  document.getElementById('branchResult').dataset.lat = branch.lat;
+  document.getElementById('branchResult').dataset.lng = branch.lng;
+  document.getElementById('branchResult').classList.remove('hidden');
+}
+
+function viewBranchLocation() {
+  const el = document.getElementById('branchResult');
+  const lat = el.dataset.lat, lng = el.dataset.lng, name = el.dataset.branch;
+  if (!lat) return;
+  window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}(${encodeURIComponent(name)})`, '_blank');
 }
 
 async function runSimulation() {
