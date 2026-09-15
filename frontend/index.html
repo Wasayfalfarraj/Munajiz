@@ -928,7 +928,61 @@ html, body { overflow-x: hidden; }
   .filters-row { flex-wrap: wrap; }
   .bulk-table { display: block; overflow-x: auto; white-space: nowrap; }
   .before-actions { flex-wrap: wrap; }
+  .guide-table thead th:nth-child(3),
+  .guide-table td:nth-child(3),
+  .guide-table thead th:nth-child(5),
+  .guide-table td:nth-child(5) { display: none; }
 }
+
+/* ── جدول دليل التعثرات ────────────────────────────── */
+.guide-legend {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-2);
+}
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+.guide-search {
+  width: 100%; padding: 9px 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: 'Tajawal', sans-serif; font-size: 13px;
+  margin-bottom: 14px; direction: rtl; outline: none;
+  background: var(--surface);
+}
+.guide-search:focus { border-color: var(--green-mid); }
+
+.guide-table-wrap {
+  overflow-x: auto; border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.guide-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; background: var(--surface);
+}
+.guide-table thead tr { background: var(--green-dark); }
+.guide-table thead th {
+  padding: 12px 14px; text-align: right; color: #fff;
+  font-weight: 600; font-size: 12px; white-space: nowrap;
+}
+.guide-table tbody tr {
+  border-bottom: 1px solid var(--border); transition: background 0.1s;
+}
+.guide-table tbody tr:last-child { border-bottom: none; }
+.guide-table tbody tr:hover { background: #f8fafb; }
+.guide-table td { padding: 11px 14px; color: var(--text); vertical-align: top; }
+.guide-table td.code-cell {
+  font-family: monospace; font-size: 12px;
+  font-weight: 700; color: var(--green-mid); white-space: nowrap;
+}
+.guide-table td.muted-text { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.resolution-badge {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+}
+.resolution-badge.auto   { background: #dcfce7; color: #15803d; }
+.resolution-badge.manual { background: #fee2e2; color: #991b1b; }
 
 </style>
 </head>
@@ -1215,31 +1269,51 @@ html, body { overflow-x: hidden; }
 <div class="page-header">
 <div>
 <h1>دليل التعثرات</h1>
-<p class="page-sub">كيف يشخّص منجز كل استثناء ويعالجه</p>
+<p class="page-sub">كل كود استثناء — ماذا يعني وكيف يعالجه منجز</p>
 </div>
 </div>
 
-<div id="codesListView">
-<div class="cases-list" id="codesList"></div>
+<!-- مفتاح الألوان -->
+<div class="guide-legend">
+  <div class="legend-item">
+    <div class="legend-dot" style="background:#dcfce7;border:1px solid #86efac"></div>
+    حل آلي — ينتهي تلقائياً بعد استيفاء الشرط
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:#fee2e2;border:1px solid #fca5a5"></div>
+    يحتاج موظف — قرار بشري إلزامي
+  </div>
 </div>
 
-<div id="codeDetailView" class="hidden">
-<button class="link-btn" onclick="showCodesList()">→ رجوع للدليل</button>
-<div class="card" style="margin-top:14px">
-<div class="card-header" id="codeDetailHeader">—</div>
-<div class="facts-grid" id="codeDetailFacts"></div>
-<div class="ai-rec" id="codeDetailAction" style="margin-top:14px"></div>
-</div>
+<input class="guide-search" type="text" placeholder="ابحث بالكود أو الاسم أو السبب..." oninput="filterGuideCodes(this.value)">
+
+<div class="guide-table-wrap">
+<table class="guide-table">
+<thead>
+<tr>
+  <th style="width:88px">الكود</th>
+  <th style="width:155px">الاسم</th>
+  <th>المعنى والسبب</th>
+  <th style="width:115px;text-align:center">نوع الحل</th>
+  <th>إجراء منجز</th>
+  <th style="width:75px;text-align:center">حالات</th>
+</tr>
+</thead>
+<tbody id="guideTableBody">
+  <tr><td colspan="6" style="color:var(--text-3);text-align:center;padding:28px">جارٍ التحميل...</td></tr>
+</tbody>
+</table>
 </div>
 
 <div class="card" style="margin-top:20px">
-<div class="card-header">توزيع حالات التعثر</div>
+<div class="card-header">توزيع حالات التعثر حسب الكود</div>
 <div class="chart-wrap">
-<canvas id="distributionChart" height="200"></canvas>
+<canvas id="distributionChart" height="180"></canvas>
 </div>
 <p style="font-size:11px;color:var(--text-3);margin-top:8px">بيانات تجريبية للعرض</p>
 </div>
 </div>
+
 
 </main>
 </div>
@@ -1691,59 +1765,60 @@ async function decideCase(id, decision, btn) {
 // ══════════════════════════════════════════════════════════════════════════
 let allCodes = [];
 
+// يُستخدم فقط لو تعذر الاتصال بالباك إند — نفس أكواد منجز الحقيقية (MUN-xxx)
+const FALLBACK_CODES = [
+  { code:'MUN-101', name_ar:'تعذر التحقق', meaning_ar:'تعذر التحقق من صحة المعاملة', root_cause_ar:'بيانات التحقق غير محدّثة أو غير مكتملة', recommended_action_ar:'إعادة التحقق من البيانات ومزامنتها مع المصدر المعتمد', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-102', name_ar:'بيانات غير متطابقة', meaning_ar:'البيانات تختلف بين الأنظمة المرتبطة', root_cause_ar:'اختلاف في قيمة نفس الحقل بين نظامين مرتبطين', recommended_action_ar:'مزامنة البيانات مع المصدر المعتمد وإعادة التحقق', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-201', name_ar:'شرط غير مستوفى', meaning_ar:'شرط مطلوب لإكمال الخدمة غير مكتمل', root_cause_ar:'أحد المتطلبات الأساسية للخدمة لم يُستوفَ بعد', recommended_action_ar:'استكمال الشرط الناقص من قبل المستفيد', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-301', name_ar:'تعثر التكامل', meaning_ar:'خدمة مرتبطة لم تستجب أو تعثر التكامل معها', root_cause_ar:'تعثر مؤقت في التكامل مع نظام حكومي مرتبط', recommended_action_ar:'إعادة تنفيذ العملية المتأثرة عبر مسار الاسترجاع المعتمد', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-302', name_ar:'انتهاء مهلة الاتصال', meaning_ar:'انتهت مهلة الاتصال أثناء المعالجة وحالة الطلب غير مؤكدة', root_cause_ar:'حالة الطلب لدى النظام المرتبط غير معروفة بسبب انقطاع الاتصال', recommended_action_ar:'التحقق من الحالة الفعلية للطلب قبل أي إعادة إرسال', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-401', name_ar:'طلب مكرر', meaning_ar:'توجد معاملة سابقة لنفس العملية', root_cause_ar:'المستفيد قدّم أكثر من طلب لنفس الخدمة', recommended_action_ar:'ربط الحالة بالمعاملة الصحيحة الموجودة ومنع التكرار', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-501', name_ar:'عطل مؤقت', meaning_ar:'عطل مؤقت في خدمة مرتبطة', root_cause_ar:'الخدمة المرتبطة غير متاحة حالياً بشكل مؤقت', recommended_action_ar:'الانتظار ضمن مسار مراقبة الاسترجاع وإعادة المحاولة عند التعافي', automatic_resolution_allowed:true, employee_intervention_required:false, open_count:0, total_count:0 },
+  { code:'MUN-600', name_ar:'يحتاج قرار موظف', meaning_ar:'لا يمكن حل الحالة بقاعدة آلية معتمدة', root_cause_ar:'الحالة حساسة أو تتطلب صلاحية بشرية رسمية', recommended_action_ar:'مراجعة الموظف واتخاذ القرار النهائي', automatic_resolution_allowed:false, employee_intervention_required:true, open_count:0, total_count:0 },
+];
+
 async function loadExceptionGuide() {
-  showCodesList();
-  const list = document.getElementById('codesList');
-  list.innerHTML = '<p style="color:var(--text-3);font-size:13px">جارٍ التحميل...</p>';
   try {
     const res = await fetch(`${API_BASE}/api/codes`);
     allCodes = await res.json();
   } catch (e) {
-    list.innerHTML = '<p style="color:#dc2626;font-size:13px">تعذر الاتصال بالسيرفر.</p>';
-    return;
+    allCodes = FALLBACK_CODES;
   }
-
-  list.innerHTML = allCodes.map(c => `
-    <div class="case-card priority-${c.automatic_resolution_allowed ? 'low' : 'high'}">
-      <div class="case-top">
-        <div>
-          <div class="case-name">${c.name_ar}</div>
-          <div class="case-meta">${c.code} · ${c.open_count} حالة مفتوحة الآن</div>
-        </div>
-        <span class="case-badge ${c.automatic_resolution_allowed ? 'financial' : 'security'}">${c.automatic_resolution_allowed ? 'حل آلي' : 'يحتاج موظف'}</span>
-      </div>
-      <div class="facts-grid">
-        <div class="fact-item"><div class="fact-k">المشكلة</div><div class="fact-v">${c.meaning_ar}</div></div>
-        <div class="fact-item"><div class="fact-k">إجمالي الحالات</div><div class="fact-v">${c.total_count}</div></div>
-      </div>
-      <div class="ai-rec"><strong>الإجراء الموصى به:</strong> ${c.recommended_action_ar}</div>
-      <div class="case-actions">
-        <button class="btn-primary" style="flex:none;padding:8px 20px" onclick="showCodeDetail('${c.code}')">التفاصيل الكاملة</button>
-      </div>
-    </div>
-  `).join('');
-
+  renderGuideTable(allCodes);
   renderDistributionChart(allCodes);
 }
 
-function showCodesList() {
-  document.getElementById('codesListView').classList.remove('hidden');
-  document.getElementById('codeDetailView').classList.add('hidden');
+function renderGuideTable(codes) {
+  const tbody = document.getElementById('guideTableBody');
+  if (!codes.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-3)">لا توجد نتائج مطابقة.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = codes.map(c => `
+    <tr style="background:${c.automatic_resolution_allowed ? '#fafffe' : '#fffafa'}">
+      <td class="code-cell">${c.code}</td>
+      <td style="font-weight:600">${c.name_ar}</td>
+      <td class="muted-text">${c.meaning_ar}<br><span style="color:var(--text-3);font-size:11px">${c.root_cause_ar || ''}</span></td>
+      <td style="text-align:center">
+        <span class="resolution-badge ${c.automatic_resolution_allowed ? 'auto' : 'manual'}">
+          ${c.automatic_resolution_allowed ? '⚙ حل آلي' : '👤 يحتاج موظف'}
+        </span>
+      </td>
+      <td class="muted-text">${c.recommended_action_ar}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-2)">${(c.open_count || 0).toLocaleString('en-US')}</td>
+    </tr>
+  `).join('');
 }
 
-function showCodeDetail(code) {
-  const c = allCodes.find(x => x.code === code);
-  if (!c) return;
-  document.getElementById('codesListView').classList.add('hidden');
-  document.getElementById('codeDetailView').classList.remove('hidden');
-  document.getElementById('codeDetailHeader').textContent = `${c.code} — ${c.name_ar}`;
-  document.getElementById('codeDetailFacts').innerHTML = `
-    <div class="fact-item"><div class="fact-k">المشكلة</div><div class="fact-v">${c.meaning_ar}</div></div>
-    <div class="fact-item"><div class="fact-k">السبب المحتمل</div><div class="fact-v">${c.root_cause_ar}</div></div>
-    <div class="fact-item"><div class="fact-k">متى يتم الحل آليًا</div><div class="fact-v ${c.automatic_resolution_allowed ? 'green' : ''}">${c.automatic_resolution_allowed ? 'عند استيفاء الشرط أو نجاح المزامنة' : 'لا يُحل آليًا'}</div></div>
-    <div class="fact-item"><div class="fact-k">متى يحتاج موظف</div><div class="fact-v ${c.employee_intervention_required ? 'red' : ''}">${c.employee_intervention_required ? 'دائماً — حالة حساسة' : 'فقط إذا فشل الحل الآلي'}</div></div>
-  `;
-  document.getElementById('codeDetailAction').innerHTML = `<strong>كيف يعالجها منجز:</strong> ${c.recommended_action_ar}`;
+function filterGuideCodes(q) {
+  const t = q.trim().toLowerCase();
+  const filtered = t ? allCodes.filter(c =>
+    c.code.toLowerCase().includes(t) ||
+    c.name_ar.includes(t) ||
+    (c.meaning_ar || '').includes(t) ||
+    (c.root_cause_ar || '').includes(t)
+  ) : allCodes;
+  renderGuideTable(filtered);
 }
 
 function renderDistributionChart(codes) {
