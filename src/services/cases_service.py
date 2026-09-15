@@ -14,6 +14,41 @@ BUCKET_LABELS = {
 # ترتيب الأولوية من الأعلى للأقل (نفس منطق "غير مرتّب حسب من وصل أولاً")
 PRIORITY_ORDER = "CASE c.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END"
 
+PRIORITY_LABELS_AR = {'high': 'عالية', 'med': 'متوسطة', 'low': 'منخفضة'}
+
+
+def generate_copilot_summary(name, sub, reason_ar, root_cause_ar, retry_count,
+                              recommendation_ar, priority, employer_name=None):
+    """
+    ملخّص Copilot — توليد نص مبني على قواعد حتمية (Rule-Based)، وليس استدعاء
+    فعليًا لخدمة ذكاء اصطناعي خارجية. يقرأ فقط بيانات الحالة الحقيقية
+    (السبب الجذري، عدد محاولات الحل الآلي، الأولوية) ويصوغ فقرة تلخيصية
+    تختلف باختلاف الحالة — بدون أي اعتماد على إنترنت خارجي أو مفتاح API.
+    الذكاء الاصطناعي هنا "يشرح فقط" ولا يعتمد ولا يرفض أي قرار.
+    """
+    sentences = [f"معاملة {name} ({sub}) متوقفة بسبب: {reason_ar}."]
+
+    if root_cause_ar:
+        sentences.append(f"السبب الجذري المسجّل: {root_cause_ar}.")
+
+    if retry_count and retry_count > 0:
+        sentences.append(
+            f"حاول منجز حل الحالة آليًا {retry_count} "
+            f"{'مرة' if retry_count == 1 else 'مرات'} ولم ينجح الحل، لذلك احتاجت الحالة تدخل موظف."
+        )
+    else:
+        sentences.append("هذه الحالة مصنّفة منذ البداية على أنها تحتاج قرارًا بشريًا إلزاميًا، ولم تُحاول آليًا حسب قواعد منجز.")
+
+    if employer_name:
+        sentences.append(f"المنشأة المرتبطة: {employer_name}.")
+
+    sentences.append(f"الأولوية: {PRIORITY_LABELS_AR.get(priority, priority)}.")
+
+    if recommendation_ar:
+        sentences.append(f"توصية منجز: {recommendation_ar}")
+
+    return ' '.join(sentences)
+
 
 def get_cases(bucket='all'):
     conn = get_connection()
@@ -23,7 +58,7 @@ def get_cases(bucket='all'):
     # الحالات القابلة لإعادة المحاولة التلقائية ما توصل هنا أصلاً
     query = f"""
         SELECT c.transaction_id, c.code, c.reason_ar, c.bucket, c.priority,
-               c.recommendation_ar, c.wait_time,
+               c.recommendation_ar, c.wait_time, c.root_cause_ar, c.retry_count,
                u.name, u.employer_name
         FROM cases c
         JOIN transactions t ON c.transaction_id = t.id
@@ -53,10 +88,16 @@ def get_cases(bucket='all'):
         for e in extra:
             facts.append({'k': e['requirement_type'], 'v': e['detail_ar'], 'cls': 'green'})
 
+        sub = 'إقامة أعمال' if r['employer_name'] else 'إقامة فردية'
+        copilot_summary = generate_copilot_summary(
+            r['name'], sub, r['reason_ar'], r['root_cause_ar'], r['retry_count'],
+            r['recommendation_ar'], r['priority'], r['employer_name']
+        )
+
         result.append({
             'id': r['transaction_id'],
             'name': r['name'],
-            'sub': 'إقامة أعمال' if r['employer_name'] else 'إقامة فردية',
+            'sub': sub,
             'type': r['bucket'],
             'typeLabel': BUCKET_LABELS.get(r['bucket'], 'خدمات أخرى'),
             'priority': r['priority'],
@@ -64,6 +105,7 @@ def get_cases(bucket='all'):
             'facts': facts,
             'rec': r['recommendation_ar'],
             'wait': r['wait_time'],
+            'copilotSummary': copilot_summary,
         })
 
     conn.close()
@@ -113,6 +155,17 @@ def get_case_detail(transaction_id):
     diagnosis = diagnose_transaction(transaction_id) or {}
     history = get_history(transaction_id)
 
+    sub = 'إقامة أعمال' if txn['employer_name'] else 'إقامة فردية'
+    copilot_summary = generate_copilot_summary(
+        txn['name'], sub,
+        case['reason_ar'] if case else diagnosis.get('root_cause'),
+        case['root_cause_ar'] if case else diagnosis.get('root_cause'),
+        case['retry_count'] if case else 0,
+        case['recommendation_ar'] if case else diagnosis.get('recommendation'),
+        case['priority'] if case else 'med',
+        txn['employer_name'],
+    )
+
     return {
         'transaction_id': transaction_id,
         'service_label': txn['service_type'],
@@ -130,6 +183,7 @@ def get_case_detail(transaction_id):
         'previous_attempts': case['retry_count'] if case else 0,
         'evidence': diagnosis.get('evidence', []),
         'history': history,
+        'copilot_summary': copilot_summary,
     }
 
 
