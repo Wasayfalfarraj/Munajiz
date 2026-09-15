@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1144,15 +1145,13 @@ html, body { overflow-x: hidden; }
 
 <div id="branchResult" class="hidden" style="margin-top:14px">
   <div class="route-labels"><span>أنت</span><span id="branchResultName">—</span></div>
-  <div class="route-visual">
-    <div class="route-dot me"></div>
-    <div class="route-line"></div>
-    <div class="route-dot branch"></div>
+  <div class="chart-wrap" style="margin:8px 0 12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <iframe id="branchMapFrame" width="100%" height="180" style="border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
   </div>
   <div class="sim-result success" style="display:block">
     <div><strong id="branchResultDistance">—</strong> · وقت الوصول التقريبي: <strong id="branchResultTime">—</strong></div>
   </div>
-  <button class="link-btn" style="margin-top:10px" onclick="viewBranchLocation()">عرض الموقع</button>
+  <button class="link-btn" style="margin-top:10px" onclick="viewBranchLocation()">فتح بخرائط جوجل</button>
   <p style="font-size:10.5px;color:var(--text-3);margin-top:8px">بيانات تجريبية للعرض — ليست متصلة بنظام حكومي حقيقي</p>
 </div>
 </div>
@@ -1535,6 +1534,7 @@ function findNearestBranch() {
   document.getElementById('branchResultName').textContent = branch.name;
   document.getElementById('branchResultDistance').textContent = `${distanceKm} كم`;
   document.getElementById('branchResultTime').textContent = `${minutes} دقيقة`;
+  document.getElementById('branchMapFrame').src = `https://www.google.com/maps?q=${branch.lat},${branch.lng}&hl=ar&z=14&output=embed`;
   document.getElementById('branchResult').dataset.branch = branch.name;
   document.getElementById('branchResult').dataset.lat = branch.lat;
   document.getElementById('branchResult').dataset.lng = branch.lng;
@@ -1805,7 +1805,7 @@ function renderCasesList(list) {
           </div>
         `).join('')}
       </div>
-      <div class="ai-rec"><strong>توصية منجز:</strong> ${c.rec}</div>
+      <div class="ai-rec"><strong>🤖 ملخص Copilot:</strong> ${c.copilotSummary}</div>
       <div class="case-actions">
         <button class="btn-primary" onclick="decideCase('${c.id}', 'approve', this)">اعتماد</button>
         <button class="btn-danger" onclick="decideCase('${c.id}', 'reject', this)">رفض</button>
