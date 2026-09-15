@@ -408,6 +408,44 @@ insert_case(demo_t4, 'MUN-600', 'other', 'الحالة تحتاج قرار مو�
             'high', True, False, CODES['MUN-600']['recommended_action_ar'], '3 أيام')
 log_history(demo_t4, 'exception_detected', 'system', 'الحالة تحتاج قرار موظف مباشرة')
 
+# ── 13ج. حل آلي مسبق لجزء من الحالات المتعثرة ─────────────────────────────
+# نحاكي هنا نتيجة تشغيل محرك الحل (resolve_transaction) على عدد من المعاملات
+# المتعثرة الحقيقية وقت بناء البيانات — نفس الخطوات اللي يسجّلها المحرك فعليًا
+# (اكتشاف → تشخيص → تنفيذ → تحقق → حل)، عشان لوحة المتابعة تعرض نسبة إنجاز
+# واقعية من أول لحظة تشغيل، بدون الحاجة لتنفيذ الحل يدويًا من الواجهة في كل مرة.
+# معاملات المستفيد التجريبي (DEMO_USER_ID) مستثناة عمدًا — تبقى تفاعلية للعرض الحي.
+AUTO_RESOLVE_COUNT = 133
+auto_resolve_ids = [
+    row['id'] for row in cur.execute(
+        """SELECT id FROM transactions
+           WHERE status = 'blocked' AND user_id != ?
+           ORDER BY id LIMIT ?""",
+        (DEMO_USER_ID, AUTO_RESOLVE_COUNT)
+    ).fetchall()
+]
+
+_resolve_time = (date(2026, 9, 14) - timedelta(hours=6)).isoformat() + 'T09:00:00'
+_RESOLVE_STEPS = [
+    ('exception_detected', 'اكتُشف الاستثناء'),
+    ('diagnosis_started', 'بدء التشخيص'),
+    ('root_cause_identified', 'تم تحديد السبب الجذري من جدول القواعد'),
+    ('requirement_completed', 'تم استكمال الشرط الناقص وإعادة فحصه'),
+    ('verification_success', 'تم التحقق من استيفاء الشرط بنجاح'),
+    ('transaction_resumed', 'استؤنفت المعاملة بعد التحقق من الحل'),
+    ('resolved', 'تم حل الاستثناء'),
+]
+
+for tid in auto_resolve_ids:
+    cur.execute("UPDATE transactions SET status = 'completed' WHERE id = ?", (tid,))
+    cur.execute("UPDATE cases SET status = 'closed' WHERE transaction_id = ? AND status = 'open'", (tid,))
+    for event, desc in _RESOLVE_STEPS:
+        log_history(tid, event, 'system', desc)
+    cur.execute(
+        """INSERT INTO retry_history (transaction_id, attempted_at, result, note_ar)
+           VALUES (?, ?, 'success', 'تم استكمال الشرط الناقص وإعادة فحصه')""",
+        (tid, _resolve_time)
+    )
+
 # ── 14. بيانات تاريخية للتوقع — 90 يوماً ─────────────────────────────────
 WEEKDAY_BASE = [22000, 20500, 19000, 21500, 18500, 14000, 12000]  # Sun..Sat
 TODAY = date(2026, 9, 14)
@@ -435,6 +473,7 @@ def count(table):
 print("✅ تم بناء قاعدة البيانات وتعبئتها بنجاح:")
 for t in ['failure_codes', 'users', 'transactions', 'requirement_checks', 'cases', 'transaction_history', 'forecast_data']:
     print(f"  {t}: {count(t)}")
+print(f"⚙️  حُلّت آليًا مسبقًا: {len(auto_resolve_ids)} معاملة")
 print("توزيع الأكواد:")
 for row in cur.execute("SELECT code, COUNT(*) c FROM cases GROUP BY code ORDER BY code"):
     print(" ", row['code'], '→', row['c'])
